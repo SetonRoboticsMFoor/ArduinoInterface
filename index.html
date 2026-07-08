@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arduino LED Dimmer</title>
+  <title>Arduino LED Control Panel</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -12,7 +12,7 @@
       background-color: #f4f4f9;
     }
     .container {
-      max-width: 400px;
+      max-width: 420px;
       margin: 0 auto;
       background: white;
       padding: 30px;
@@ -21,17 +21,25 @@
     }
     button {
       padding: 12px 20px;
-      font-size: 16px;
+      font-size: 15px;
       border: none;
       border-radius: 5px;
       cursor: pointer;
       margin: 5px;
     }
     .connect-btn { background-color: #008CBA; color: white; }
-    .disconnect-btn { background-color: #f44336; color: white; }
+    .disconnect-btn { background-color: #777777; color: white; }
+    .on-btn { background-color: #4CAF50; color: white; }
+    .off-btn { background-color: #f44336; color: white; }
     button:disabled { background-color: #cccccc; cursor: not-allowed; }
+    
+    .control-section {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
     .slider-container {
-      margin-top: 25px;
+      margin-top: 20px;
     }
     input[type=range] {
       width: 80%;
@@ -42,14 +50,21 @@
 <body>
 
   <div class="container">
-    <h1>LED Brightness Control</h1>
+    <h1>LED Control Panel</h1>
     
-    <button id="connectBtn" class="connect-btn">Connect</button>
-    <button id="disconnectBtn" class="disconnect-btn" disabled>Disconnect</button>
-    
-    <div class="slider-container">
-      <label for="brightnessSlider"><strong>Brightness: <span id="valDisplay">0</span></strong></label><br>
-      <input type="range" id="brightnessSlider" min="0" max="255" value="0" disabled>
+    <div>
+      <button id="connectBtn" class="connect-btn">Connect</button>
+      <button id="disconnectBtn" class="disconnect-btn" disabled>Disconnect</button>
+    </div>
+
+    <div class="control-section">
+      <button id="onBtn" class="on-btn" disabled>Turn ON</button>
+      <button id="offBtn" class="off-btn" disabled>Turn OFF</button>
+
+      <div class="slider-container">
+        <label for="brightnessSlider"><strong>Brightness: <span id="valDisplay">255</span></strong></label><br>
+        <input type="range" id="brightnessSlider" min="1" max="255" value="255" disabled>
+      </div>
     </div>
   </div>
 
@@ -59,10 +74,21 @@
     let textEncoder;
     let writableStreamClosed;
 
+    let isLedOn = false; // Tracks whether the LED is currently ON
+
     const connectBtn = document.getElementById('connectBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
+    const onBtn = document.getElementById('onBtn');
+    const offBtn = document.getElementById('offBtn');
     const slider = document.getElementById('brightnessSlider');
     const valDisplay = document.getElementById('valDisplay');
+
+    // Helper to send data over Serial
+    async function sendCommand(value) {
+      if (writer) {
+        await writer.write(value + '\n');
+      }
+    }
 
     // Connect to Serial Port
     connectBtn.addEventListener('click', async () => {
@@ -77,10 +103,12 @@
 
           alert('Connected to Arduino successfully!');
           
-          // UI state updates
-          slider.disabled = false;
+          // Enable controls
           connectBtn.disabled = true;
           disconnectBtn.disabled = false;
+          onBtn.disabled = false;
+          offBtn.disabled = false;
+          slider.disabled = false;
         } catch (err) {
           console.error('Error connecting:', err);
           alert('Failed to connect: ' + err.message);
@@ -94,30 +122,27 @@
     disconnectBtn.addEventListener('click', async () => {
       if (port) {
         try {
-          // Reset LED state before disconnecting
           if (writer) {
-            await writer.write('0\n');
-            slider.value = 0;
-            valDisplay.textContent = 0;
-            
-            // Release the writer lock
+            await sendCommand(0); // Turn off LED on disconnect
             writer.releaseLock();
           }
 
-          // Close the stream pipeline and the serial port
           await textEncoder.readable.cancel();
-          await writableStreamClosed.catch(() => {}); // Catch pipe cancellation error
+          await writableStreamClosed.catch(() => {});
           await port.close();
 
           port = null;
           writer = null;
+          isLedOn = false;
 
           alert('Disconnected from Arduino.');
 
-          // UI state updates
-          slider.disabled = true;
+          // Reset UI state
           connectBtn.disabled = false;
           disconnectBtn.disabled = true;
+          onBtn.disabled = true;
+          offBtn.disabled = true;
+          slider.disabled = true;
         } catch (err) {
           console.error('Error disconnecting:', err);
           alert('Failed to disconnect: ' + err.message);
@@ -125,13 +150,27 @@
       }
     });
 
-    // Send brightness value when slider moves
+    // Turn LED ON (Uses current slider value)
+    onBtn.addEventListener('click', async () => {
+      isLedOn = true;
+      const currentBrightness = slider.value;
+      await sendCommand(currentBrightness);
+    });
+
+    // Turn LED OFF
+    offBtn.addEventListener('click', async () => {
+      isLedOn = false;
+      await sendCommand(0);
+    });
+
+    // Adjust Brightness Slider
     slider.addEventListener('input', async () => {
       const value = slider.value;
       valDisplay.textContent = value;
 
-      if (writer) {
-        await writer.write(value + '\n');
+      // Only update the live hardware LED brightness if the LED is currently turned ON
+      if (isLedOn) {
+        await sendCommand(value);
       }
     });
   </script>
