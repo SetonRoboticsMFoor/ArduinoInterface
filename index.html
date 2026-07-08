@@ -83,10 +83,11 @@
     const slider = document.getElementById('brightnessSlider');
     const valDisplay = document.getElementById('valDisplay');
 
-    // Helper to send data over Serial safely
+    // Send command safely over Web Serial
     async function sendCommand(value) {
       if (writer) {
         try {
+          // Sending \n tells Serial.parseInt() that the number is complete immediately
           await writer.write(value + '\n');
         } catch (err) {
           console.warn('Write skipped or interrupted:', err);
@@ -107,7 +108,6 @@
 
           alert('Connected to Arduino successfully!');
           
-          // Enable controls
           connectBtn.disabled = true;
           disconnectBtn.disabled = false;
           onBtn.disabled = false;
@@ -122,37 +122,29 @@
       }
     });
 
-    // Disconnect from Serial Port safely
+    // Disconnect safely
     disconnectBtn.addEventListener('click', async () => {
       if (port) {
         try {
-          // 1. Try to turn off LED before closing
           if (writer) {
             try {
               await writer.write('0\n');
-            } catch (e) {
-              console.log('Could not send off signal during disconnect:', e);
-            }
-
-            // 2. Safely release writer lock
+            } catch (e) {}
             writer.releaseLock();
             writer = null;
           }
 
-          // 3. Close the stream pipeline
           if (textEncoder) {
             await textEncoder.readable.cancel().catch(() => {});
             await writableStreamClosed.catch(() => {});
           }
 
-          // 4. Close the serial port
           await port.close();
           port = null;
           isLedOn = false;
 
           alert('Disconnected from Arduino.');
 
-          // Reset UI state
           connectBtn.disabled = false;
           disconnectBtn.disabled = true;
           onBtn.disabled = true;
@@ -168,8 +160,7 @@
     // Turn LED ON
     onBtn.addEventListener('click', async () => {
       isLedOn = true;
-      const currentBrightness = slider.value;
-      await sendCommand(currentBrightness);
+      await sendCommand(slider.value);
     });
 
     // Turn LED OFF
@@ -178,7 +169,7 @@
       await sendCommand(0);
     });
 
-    // Adjust Brightness Slider
+    // Slider adjustment
     slider.addEventListener('input', async () => {
       const value = slider.value;
       valDisplay.textContent = value;
