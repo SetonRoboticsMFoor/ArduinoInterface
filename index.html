@@ -122,37 +122,47 @@
       }
     });
 
-    // Disconnect safely
+    // Disconnect safely with guaranteed UI reset
     disconnectBtn.addEventListener('click', async () => {
       if (port) {
         try {
+          // 1. Send OFF command
           if (writer) {
             try {
               await writer.write('0\n');
             } catch (e) {}
+            
+            try {
+              await writer.close();
+            } catch (e) {}
+
             writer.releaseLock();
             writer = null;
           }
 
+          // 2. Cancel and release streams
           if (textEncoder) {
-            await textEncoder.readable.cancel().catch(() => {});
+            try {
+              await textEncoder.readable.cancel();
+            } catch (e) {}
             await writableStreamClosed.catch(() => {});
           }
 
+          // 3. Close port
           await port.close();
+          alert('Disconnected from Arduino.');
+        } catch (err) {
+          console.warn('Cleanup warning during disconnect:', err);
+        } finally {
+          // ALWAYS reset variables and UI controls regardless of errors
           port = null;
           isLedOn = false;
-
-          alert('Disconnected from Arduino.');
 
           connectBtn.disabled = false;
           disconnectBtn.disabled = true;
           onBtn.disabled = true;
           offBtn.disabled = true;
           slider.disabled = true;
-        } catch (err) {
-          console.error('Error disconnecting:', err);
-          alert('Failed to disconnect: ' + err.message);
         }
       }
     });
