@@ -74,7 +74,7 @@
     let textEncoder;
     let writableStreamClosed;
 
-    let isLedOn = false; // Tracks whether the LED is currently ON
+    let isLedOn = false;
 
     const connectBtn = document.getElementById('connectBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
@@ -83,10 +83,14 @@
     const slider = document.getElementById('brightnessSlider');
     const valDisplay = document.getElementById('valDisplay');
 
-    // Helper to send data over Serial
+    // Helper to send data over Serial safely
     async function sendCommand(value) {
       if (writer) {
-        await writer.write(value + '\n');
+        try {
+          await writer.write(value + '\n');
+        } catch (err) {
+          console.warn('Write skipped or interrupted:', err);
+        }
       }
     }
 
@@ -118,21 +122,32 @@
       }
     });
 
-    // Disconnect from Serial Port
+    // Disconnect from Serial Port safely
     disconnectBtn.addEventListener('click', async () => {
       if (port) {
         try {
+          // 1. Try to turn off LED before closing
           if (writer) {
-            await sendCommand(0); // Turn off LED on disconnect
+            try {
+              await writer.write('0\n');
+            } catch (e) {
+              console.log('Could not send off signal during disconnect:', e);
+            }
+
+            // 2. Safely release writer lock
             writer.releaseLock();
+            writer = null;
           }
 
-          await textEncoder.readable.cancel();
-          await writableStreamClosed.catch(() => {});
-          await port.close();
+          // 3. Close the stream pipeline
+          if (textEncoder) {
+            await textEncoder.readable.cancel().catch(() => {});
+            await writableStreamClosed.catch(() => {});
+          }
 
+          // 4. Close the serial port
+          await port.close();
           port = null;
-          writer = null;
           isLedOn = false;
 
           alert('Disconnected from Arduino.');
@@ -150,7 +165,7 @@
       }
     });
 
-    // Turn LED ON (Uses current slider value)
+    // Turn LED ON
     onBtn.addEventListener('click', async () => {
       isLedOn = true;
       const currentBrightness = slider.value;
@@ -168,7 +183,6 @@
       const value = slider.value;
       valDisplay.textContent = value;
 
-      // Only update the live hardware LED brightness if the LED is currently turned ON
       if (isLedOn) {
         await sendCommand(value);
       }
