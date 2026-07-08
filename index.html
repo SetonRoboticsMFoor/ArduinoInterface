@@ -83,14 +83,14 @@
     const slider = document.getElementById('brightnessSlider');
     const valDisplay = document.getElementById('valDisplay');
 
-    // Send command safely over Web Serial
+    // Send formatted string with explicit newline
     async function sendCommand(value) {
       if (writer) {
         try {
-          // Sending \n tells Serial.parseInt() that the number is complete immediately
-          await writer.write(value + '\n');
+          const stringValue = String(value) + '\n';
+          await writer.write(stringValue);
         } catch (err) {
-          console.warn('Write skipped or interrupted:', err);
+          console.warn('Write error:', err);
         }
       }
     }
@@ -157,10 +157,11 @@
       }
     });
 
-    // Turn LED ON
+    // Turn LED ON (Sends numerical slider value)
     onBtn.addEventListener('click', async () => {
       isLedOn = true;
-      await sendCommand(slider.value);
+      const currentVal = parseInt(slider.value, 10);
+      await sendCommand(currentVal);
     });
 
     // Turn LED OFF
@@ -169,13 +170,13 @@
       await sendCommand(0);
     });
 
-    // Slider adjustment
+    // Adjust Brightness Slider
     slider.addEventListener('input', async () => {
-      const value = slider.value;
-      valDisplay.textContent = value;
+      const currentVal = parseInt(slider.value, 10);
+      valDisplay.textContent = currentVal;
 
       if (isLedOn) {
-        await sendCommand(value);
+        await sendCommand(currentVal);
       }
     });
   </script>
